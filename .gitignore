@@ -1,0 +1,14 @@
+git-credential*
+linux-install*
+venv
+__py*
+
+# Terraform local files
+.terraform/
+*.tfstate
+*.tfstate.backup
+terraform.tfstate.d/
+*.tfplan
+*.tfplan-prod
+.terraform/environment
+crash.log
