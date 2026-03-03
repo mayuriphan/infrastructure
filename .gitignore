@@ -12,3 +12,6 @@ terraform.tfstate.d/
 *.tfplan-prod
 .terraform/environment
 crash.log
+tfplan*
+*.tfvars
+*.tfvars.json
