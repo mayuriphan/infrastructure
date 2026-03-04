@@ -31,6 +31,7 @@ module "ec2_k8" {
   instance_profile = module.iam.instance_profile
   env              = var.env
   name             = "${var.env}-k8-instance"
+  role             = "k8"
 }
 
 module "ec2_monitoring" {
@@ -42,6 +43,7 @@ module "ec2_monitoring" {
   instance_profile = module.iam.instance_profile
   env              = var.env
   name             = "${var.env}-monitoring-instance"
+  role             = "monitoring"
 }
 
 module "ec2_db" {
@@ -53,6 +55,7 @@ module "ec2_db" {
   instance_profile = module.iam.instance_profile
   env              = var.env
   name             = "${var.env}-influxdb-instance"
+  role           = "db"
 }
 
 # module "autoscaling" {

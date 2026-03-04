@@ -12,6 +12,7 @@ resource "aws_instance" "this" {
   tags = {
     Name = var.name
     Environment = var.env
+    Role        = var.role
   }
 }
 

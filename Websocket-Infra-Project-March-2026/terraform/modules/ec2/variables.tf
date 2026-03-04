@@ -23,6 +23,11 @@ variable "env" {
   type = string
 }
 
+variable "role" {
+  description = "Role of the EC2 instance (k8, worker, db, etc)"
+  type        = string
+}
+
 variable "subnet_id" {}
 
 variable "name" {}
