@@ -54,8 +54,32 @@ module "ec2_db" {
   subnet_id        = module.vpc.public_subnet_id
   instance_profile = module.iam.instance_profile
   env              = var.env
-  name             = "${var.env}-influxdb-instance"
+  name             = "${var.env}-postgres-instance"
   role           = "db"
+}
+
+module "ec2_worker" {
+  source           = "../../modules/ec2"
+  ami              = var.ami
+  key_name         = var.key_name
+  sg_id            = module.sg.sg_id
+  subnet_id        = module.vpc.public_subnet_id
+  instance_profile = module.iam.instance_profile
+  env              = var.env
+  name             = "${var.env}-k8-worker-instance"
+  role           = "worker"
+}
+
+module "ec2_rabbit" {
+  source           = "../../modules/ec2"
+  ami              = var.ami
+  key_name         = var.key_name
+  sg_id            = module.sg.sg_id
+  subnet_id        = module.vpc.public_subnet_id
+  instance_profile = module.iam.instance_profile
+  env              = var.env
+  name             = "${var.env}-rabbit-instance"
+  role           = "rabbit"
 }
 
 # module "autoscaling" {
