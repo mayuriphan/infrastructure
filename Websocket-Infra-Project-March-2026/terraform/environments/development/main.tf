@@ -22,6 +22,18 @@ module "ecr" {
   env    = var.env
 }
 
+module "ec2_bastion" {
+  source           = "../../modules/ec2"
+  ami              = var.ami
+  key_name         = var.key_name
+  sg_id            = module.sg.sg_id
+  subnet_id        = module.vpc.public_subnet_id
+  instance_profile = module.iam.instance_profile
+  env              = var.env
+  name             = "${var.env}-bastion-instance"
+  role             = "bastion"
+}
+
 module "ec2_k8" {
   source           = "../../modules/ec2"
   ami              = var.ami
@@ -58,7 +70,7 @@ module "ec2_db" {
   role           = "db"
 }
 
-module "ec2_worker" {
+module "ec2_worker1" {
   source           = "../../modules/ec2"
   ami              = var.ami
   key_name         = var.key_name
@@ -66,7 +78,19 @@ module "ec2_worker" {
   subnet_id        = module.vpc.public_subnet_id
   instance_profile = module.iam.instance_profile
   env              = var.env
-  name             = "${var.env}-k8-worker-instance"
+  name             = "${var.env}-k8-worker1-instance"
+  role           = "worker"
+}
+
+module "ec2_worker2" {
+  source           = "../../modules/ec2"
+  ami              = var.ami
+  key_name         = var.key_name
+  sg_id            = module.sg.sg_id
+  subnet_id        = module.vpc.public_subnet_id
+  instance_profile = module.iam.instance_profile
+  env              = var.env
+  name             = "${var.env}-k8-worker2-instance"
   role           = "worker"
 }
 
