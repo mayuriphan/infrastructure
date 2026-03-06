@@ -1,0 +1,7 @@
+- name: Setup Kubernetes cluster
+  hosts: master:workers
+  become: yes
+
+  roles:
+    - common
+    - kubernetes

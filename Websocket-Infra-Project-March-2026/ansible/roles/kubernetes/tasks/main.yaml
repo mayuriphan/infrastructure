@@ -1,0 +1,44 @@
+- name: Install kube packages
+  apt:
+    name:
+      - kubeadm={{ k8_version }}
+      - kubelet={{ k8_version }}
+      - kubectl={{ k8_version }}
+    state: present
+    update_cache: yes
+
+- name: Hold packages
+  apt:
+    name:
+      - kubeadm
+      - kubelet
+      - kubectl
+    mark_hold: yes
+
+- name: Initialize master
+  command: kubeadm init --pod-network-cidr={{ pod_network_cidr }}
+  when: inventory_hostname in groups['master']
+
+- name: Setup kubeconfig
+  shell: |
+    mkdir -p /home/ubuntu/.kube
+    cp /etc/kubernetes/admin.conf /home/ubuntu/.kube/config
+    chown ubuntu:ubuntu /home/ubuntu/.kube/config
+  when: inventory_hostname in groups['master']
+
+- name: Generate join command
+  shell: kubeadm token create --print-join-command
+  register: join_command
+  when: inventory_hostname in groups['master']
+
+- name: Join workers
+  command: "{{ hostvars[groups['master'][0]].join_command.stdout }}"
+  when: inventory_hostname in groups['workers']
+
+- name: Install Flannel network
+  command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+  when: inventory_hostname in groups['master']
+
+- name: Install EBS CSI driver
+  command: kubectl apply -k github.com/kubernetes-sigs/aws-ebs-csi-driver/deploy/kubernetes/overlays/stable/
+  when: inventory_hostname in groups['master']

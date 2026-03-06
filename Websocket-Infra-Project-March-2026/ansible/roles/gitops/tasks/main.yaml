@@ -1,0 +1,17 @@
+- name: Install ArgoCD
+  command: kubectl create namespace argocd
+
+- name: Deploy ArgoCD
+  command: kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+- name: Install Vault
+  command: helm repo add hashicorp https://helm.releases.hashicorp.com
+
+- name: Deploy Vault
+  command: helm install vault hashicorp/vault --namespace vault --create-namespace
+
+- name: Install External Secrets
+  command: helm repo add external-secrets https://charts.external-secrets.io
+
+- name: Deploy External Secrets
+  command: helm install external-secrets external-secrets/external-secrets --namespace external-secrets --create-namespace

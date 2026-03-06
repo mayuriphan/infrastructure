@@ -1,0 +1,5 @@
+- name: Add prometheus repo
+  command: helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+
+- name: Install Prometheus
+  command: helm install prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace

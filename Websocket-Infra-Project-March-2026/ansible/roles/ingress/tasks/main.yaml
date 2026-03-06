@@ -1,0 +1,23 @@
+- name: Add ingress repo
+  command: helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+
+- name: Install ingress controller
+  command: helm install ingress-nginx ingress-nginx/ingress-nginx --namespace ingress-nginx --create-namespace
+
+- name: Add external dns repo
+  command: helm repo add external-dns https://kubernetes-sigs.github.io/external-dns/
+
+- name: Install external dns
+  command: helm install external-dns external-dns/external-dns --namespace kube-system
+
+- name: Install AWS Load Balancer Controller
+  command: helm repo add eks https://aws.github.io/eks-charts
+
+- name: Deploy AWS LB Controller
+  command: helm install aws-load-balancer-controller eks/aws-load-balancer-controller --namespace kube-system
+
+- name: Install oauth2 proxy
+  command: helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests
+
+- name: Deploy oauth2 proxy
+  command: helm install oauth2-proxy oauth2-proxy/oauth2-proxy --namespace oauth2-proxy --create-namespace

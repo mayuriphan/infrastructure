@@ -1,0 +1,10 @@
+k8_version: "1.29.0-00"
+kubeadm_extra_args: ""
+helm_version: "3.13.4"
+
+pod_network_cidr: "10.244.0.0/16"
+
+postgres_db: "myappdb"
+postgres_user: "myappuser"
+
+rabbitmq_user: "myapp"

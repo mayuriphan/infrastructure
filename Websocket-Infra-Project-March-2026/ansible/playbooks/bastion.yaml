@@ -1,0 +1,7 @@
+- name: Setup Bastion
+  hosts: bastion
+  become: yes
+
+  roles:
+    - common
+    - bastion

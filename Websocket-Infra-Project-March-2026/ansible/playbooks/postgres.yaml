@@ -1,0 +1,7 @@
+- name: Setup Postgres
+  hosts: postgres
+  become: yes
+
+  roles:
+    - common
+    - postgres

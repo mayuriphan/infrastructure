@@ -1,0 +1,30 @@
+- hosts: all
+  become: yes
+  roles:
+    - common
+
+- hosts: postgres
+  become: yes
+  roles:
+    - postgres
+
+- hosts: rabbitmq
+  become: yes
+  roles:
+    - rabbitmq
+
+- hosts: master:workers
+  become: yes
+  roles:
+    - kubernetes
+
+- hosts: monitoring
+  become: yes
+  roles:
+    - monitoring
+
+- hosts: master
+  become: yes
+  roles:
+    - ingress
+    - gitops
