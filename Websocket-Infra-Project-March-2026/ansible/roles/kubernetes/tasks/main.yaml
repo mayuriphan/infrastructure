@@ -1,44 +1,197 @@
-- name: Install kube packages
+# roles/kubernetes/tasks/main.yaml
+
+# ----------------------
+# 1. Install dependencies for apt & kubelet
+# ----------------------
+- name: Install dependencies
   apt:
     name:
-      - kubeadm={{ k8_version }}
-      - kubelet={{ k8_version }}
-      - kubectl={{ k8_version }}
+      - curl
+      - socat
+      - conntrack
+      - ipset
+      - ebtables
+      - apt-transport-https
+      - ca-certificates
+      - gnupg
+      - lsb-release
     state: present
     update_cache: yes
 
-- name: Hold packages
+# -----------------------
+# Install container runtime
+# -----------------------
+- name: Install containerd
   apt:
-    name:
-      - kubeadm
-      - kubelet
-      - kubectl
-    mark_hold: yes
+    name: containerd
+    state: present
+    update_cache: yes
 
-- name: Initialize master
-  command: kubeadm init --pod-network-cidr={{ pod_network_cidr }}
+- name: Create containerd config directory
+  file:
+    path: /etc/containerd
+    state: directory
+
+- name: Generate containerd default config
+  command: containerd config default
+  register: containerd_config
+  changed_when: false
+
+- name: Write containerd config
+  copy:
+    dest: /etc/containerd/config.toml
+    content: "{{ containerd_config.stdout }}"
+    mode: '0644'
+
+- name: Restart containerd
+  systemd:
+    name: containerd
+    state: restarted
+    enabled: yes
+    daemon_reload: yes
+
+# -----------------------
+# Kubernetes networking prerequisites
+# -----------------------
+
+- name: Load br_netfilter module
+  command: modprobe br_netfilter
+
+- name: Enable bridge networking
+  sysctl:
+    name: net.bridge.bridge-nf-call-iptables
+    value: 1
+    state: present
+
+- name: Enable IP forwarding
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: 1
+    state: present
+
+# -----------------------
+# Kubernetes repo (new pkgs.k8s.io)
+# -----------------------
+- name: Create apt keyrings directory
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Download Kubernetes repo key
+  get_url:
+    url: https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key
+    dest: /etc/apt/keyrings/kubernetes-apt-keyring.asc
+    mode: '0644'
+
+- name: Add Kubernetes apt repository
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /"
+    state: present
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+
+# -----------------------
+# Install kubelet
+# -----------------------
+- name: Install kubelet
+  apt:
+    name: kubelet
+    state: present
+
+- name: Hold kubelet version
+  dpkg_selections:
+    name: kubelet
+    selection: hold
+
+- name: Enable kubelet
+  systemd:
+    name: kubelet
+    enabled: yes
+    state: started
+
+# ----------------------
+# 3. Install kubeadm binary (master/admin only)
+# ----------------------
+- name: Download kubeadm binary
+  get_url:
+    url: "https://dl.k8s.io/release/v{{ k8_version.split('-')[0] }}/bin/linux/amd64/kubeadm"
+    dest: /usr/local/bin/kubeadm
+    mode: '0755'
+    force: no
   when: inventory_hostname in groups['master']
 
-- name: Setup kubeconfig
+# ----------------------
+# 4. Install kubectl binary (master/admin only)
+# ----------------------
+- name: Download kubectl binary
+  get_url:
+    url: "https://dl.k8s.io/release/v{{ k8_version.split('-')[0] }}/bin/linux/amd64/kubectl"
+    dest: /usr/local/bin/kubectl
+    mode: '0755'
+    force: no
+  when: inventory_hostname in groups['master']
+
+# ----------------------
+# 5. Initialize master
+# ----------------------
+#- name: Initialize master node
+  #command: kubeadm init --pod-network-cidr={{ pod_network_cidr }}
+  #when: inventory_hostname in groups['master']
+  #register: kubeadm_init
+  #ignore_errors: yes
+- name: Initialize master node
+  command: >
+    kubeadm init
+    --pod-network-cidr={{ pod_network_cidr }}
+    --ignore-preflight-errors=all
+  args:
+    creates: /etc/kubernetes/admin.conf
+  when: inventory_hostname in groups['master']
+  register: kubeadm_init
+
+# ----------------------
+# 6. Setup kubeconfig
+# ----------------------
+- name: Setup kubeconfig for master
   shell: |
     mkdir -p /home/ubuntu/.kube
     cp /etc/kubernetes/admin.conf /home/ubuntu/.kube/config
     chown ubuntu:ubuntu /home/ubuntu/.kube/config
   when: inventory_hostname in groups['master']
 
-- name: Generate join command
+# ----------------------
+# 7. Generate join command for workers
+# ----------------------
+- name: Generate kubeadm join command
   shell: kubeadm token create --print-join-command
   register: join_command
-  when: inventory_hostname in groups['master']
+  when: inventory_hostname == groups['master'][0]
 
-- name: Join workers
-  command: "{{ hostvars[groups['master'][0]].join_command.stdout }}"
+- name: Save join command as fact
+  set_fact:
+    kube_join_cmd: "{{ join_command.stdout }}"
+  when: inventory_hostname == groups['master'][0]
+
+# ----------------------
+# 8. Join worker nodes
+# ----------------------
+- name: Join worker nodes to cluster
+  command: "{{ hostvars[groups['master'][0]].kube_join_cmd }}"
   when: inventory_hostname in groups['workers']
 
-- name: Install Flannel network
+# ----------------------
+# 9. Install Flannel network plugin
+# ----------------------
+- name: Install Flannel CNI network
   command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
-  when: inventory_hostname in groups['master']
+  when: inventory_hostname == groups['master'][0]
 
+# ----------------------
+# 10. Install AWS EBS CSI driver
+# ----------------------
 - name: Install EBS CSI driver
   command: kubectl apply -k github.com/kubernetes-sigs/aws-ebs-csi-driver/deploy/kubernetes/overlays/stable/
   when: inventory_hostname in groups['master']

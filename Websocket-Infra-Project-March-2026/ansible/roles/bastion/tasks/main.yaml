@@ -1,20 +1,49 @@
-- name: Install Ansible dependencies
+- name: Update apt cache and install dependencies
   apt:
     name:
       - ansible
       - git
       - python3-pip
+      - unzip
+      - curl
+      - ca-certificates
     state: present
+    update_cache: yes
 
-- name: Install AWS CLI
-  apt:
-    name: awscli
-    state: present
+# ----------------------
+# Install AWS CLI v2
+# ----------------------
+- name: Download AWS CLI v2
+  get_url:
+    url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+    dest: /tmp/awscliv2.zip
 
-- name: Install kubectl
-  apt:
-    name: kubectl
-    state: present
+- name: Unzip AWS CLI v2
+  unarchive:
+    src: /tmp/awscliv2.zip
+    dest: /tmp
+    remote_src: yes
 
-- name: Install helm
+- name: Install AWS CLI v2
+  shell: /tmp/aws/install --update
+  args:
+    creates: /usr/local/bin/aws
+
+# ----------------------
+# K8
+# ----------------------
+- name: Download kubectl latest stable version
+  shell: |
+    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    chmod +x kubectl
+    mv kubectl /usr/local/bin/kubectl
+  args:
+    creates: /usr/local/bin/kubectl
+
+# ----------------------
+# Helm
+# ----------------------
+- name: Download and install Helm
   shell: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  args:
+    creates: /usr/local/bin/helm
