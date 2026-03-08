@@ -43,6 +43,12 @@
     content: "{{ containerd_config.stdout }}"
     mode: '0644'
 
+- name: Enable systemd cgroup driver
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: 'SystemdCgroup = false'
+    replace: 'SystemdCgroup = true'
+
 - name: Restart containerd
   systemd:
     name: containerd
@@ -110,7 +116,7 @@
   systemd:
     name: kubelet
     enabled: yes
-    state: started
+    state: stopped
 
 # ----------------------
 # 3. Install kubeadm binary (master/admin only)
@@ -156,11 +162,6 @@
 # ----------------------
 # 5. Initialize master
 # ----------------------
-#- name: Initialize master node
-  #command: kubeadm init --pod-network-cidr={{ pod_network_cidr }}
-  #when: inventory_hostname in groups['master']
-  #register: kubeadm_init
-  #ignore_errors: yes
 - name: Initialize master node
   command: >
     kubeadm init
