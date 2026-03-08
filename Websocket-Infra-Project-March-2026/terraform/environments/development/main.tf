@@ -38,6 +38,7 @@ module "ec2_k8" {
   source           = "../../modules/ec2"
   ami              = var.ami
   key_name         = var.key_name
+  instance_type    = "t3.small" # k8 master needs more resources than free-tier
   sg_id            = module.sg.sg_id
   subnet_id        = module.vpc.public_subnet_id
   instance_profile = module.iam.instance_profile
