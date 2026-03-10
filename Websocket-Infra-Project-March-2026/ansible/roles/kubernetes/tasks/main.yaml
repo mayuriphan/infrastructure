@@ -1,9 +1,10 @@
-# roles/kubernetes/tasks/main.yaml
+---
 
-# ----------------------
-# 1. Install dependencies for apt & kubelet
-# ----------------------
-- name: Install dependencies
+# =========================
+# 1. Install dependencies
+# =========================
+
+- name: Install system dependencies
   apt:
     name:
       - curl
@@ -15,27 +16,66 @@
       - ca-certificates
       - gnupg
       - lsb-release
+      - iptables
     state: present
     update_cache: yes
 
-# -----------------------
-# Install container runtime
-# -----------------------
+
+# =========================
+# 2. Load kernel modules
+# =========================
+
+- name: Load overlay module
+  modprobe:
+    name: overlay
+    state: present
+
+- name: Load br_netfilter module
+  modprobe:
+    name: br_netfilter
+    state: present
+
+
+# =========================
+# 3. Configure Kubernetes networking sysctl
+# =========================
+
+- name: Configure sysctl for Kubernetes
+  copy:
+    dest: /etc/sysctl.d/k8s.conf
+    content: |
+      net.bridge.bridge-nf-call-ip6tables = 1
+      net.bridge.bridge-nf-call-iptables = 1
+      net.ipv4.ip_forward = 1
+    mode: '0644'
+
+
+- name: Apply sysctl params
+  command: sysctl --system
+
+
+# =========================
+# 4. Install container runtime
+# =========================
+
 - name: Install containerd
   apt:
     name: containerd
     state: present
     update_cache: yes
 
+
 - name: Create containerd config directory
   file:
     path: /etc/containerd
     state: directory
 
-- name: Generate containerd default config
+
+- name: Generate containerd config
   command: containerd config default
   register: containerd_config
   changed_when: false
+
 
 - name: Write containerd config
   copy:
@@ -43,11 +83,13 @@
     content: "{{ containerd_config.stdout }}"
     mode: '0644'
 
+
 - name: Enable systemd cgroup driver
   replace:
     path: /etc/containerd/config.toml
     regexp: 'SystemdCgroup = false'
     replace: 'SystemdCgroup = true'
+
 
 - name: Restart containerd
   systemd:
@@ -56,28 +98,26 @@
     enabled: yes
     daemon_reload: yes
 
-# -----------------------
-# Kubernetes networking prerequisites
-# -----------------------
 
-- name: Load br_netfilter module
-  command: modprobe br_netfilter
+# =========================
+# 5. Fix iptables mode (recommended)
+# =========================
 
-- name: Enable bridge networking
-  sysctl:
-    name: net.bridge.bridge-nf-call-iptables
-    value: 1
-    state: present
+- name: Set iptables to legacy mode
+  alternatives:
+    name: iptables
+    path: /usr/sbin/iptables-legacy
 
-- name: Enable IP forwarding
-  sysctl:
-    name: net.ipv4.ip_forward
-    value: 1
-    state: present
+- name: Set ip6tables to legacy mode
+  alternatives:
+    name: ip6tables
+    path: /usr/sbin/ip6tables-legacy
 
-# -----------------------
-# Kubernetes repo (new pkgs.k8s.io)
-# -----------------------
+
+# =========================
+# 6. Kubernetes repository
+# =========================
+
 - name: Create apt keyrings directory
   file:
     path: /etc/apt/keyrings
@@ -86,79 +126,64 @@
 
 - name: Download Kubernetes repo key
   get_url:
-    url: https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key
+    url: https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key
     dest: /etc/apt/keyrings/kubernetes-apt-keyring.asc
     mode: '0644'
 
+
 - name: Add Kubernetes apt repository
   apt_repository:
-    repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /"
+    repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /"
     state: present
+
 
 - name: Update apt cache
   apt:
     update_cache: yes
 
-# -----------------------
-# Install kubelet
-# -----------------------
-- name: Install kubelet
+
+# =========================
+# 7. Install Kubernetes packages
+# =========================
+
+- name: Install Kubernetes binaries
   apt:
-    name: kubelet
+    name:
+      - kubelet
+      - kubeadm
+      - kubectl
     state: present
 
-- name: Hold kubelet version
-  dpkg_selections:
-    name: kubelet
-    selection: hold
+
+- name: Hold Kubernetes packages
+  command: apt-mark hold kubelet kubeadm kubectl
+
 
 - name: Enable kubelet
   systemd:
     name: kubelet
-    state: stopped
+    enabled: yes
+    state: started
 
-# ----------------------
-# 3. Install kubeadm binary (master/admin only)
-# ----------------------
-- name: Download kubeadm binary
-  get_url:
-    url: "https://dl.k8s.io/release/v{{ k8_version.split('-')[0] }}/bin/linux/amd64/kubeadm"
-    dest: /usr/local/bin/kubeadm
-    mode: '0755'
-    force: no
-  when: inventory_hostname in groups['master']
 
-# ----------------------
-# 4. Install kubectl binary (master/admin only)
-# ----------------------
-- name: Download kubectl binary
-  get_url:
-    url: "https://dl.k8s.io/release/v{{ k8_version.split('-')[0] }}/bin/linux/amd64/kubectl"
-    dest: /usr/local/bin/kubectl
-    mode: '0755'
-    force: no
-  when: inventory_hostname in groups['master']
+# =========================
+# 8. Install crictl
+# =========================
 
-# Install crictl before initializing master
 - name: Download crictl
   get_url:
     url: https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.30.0/crictl-v1.30.0-linux-amd64.tar.gz
     dest: /tmp/crictl.tar.gz
+
 
 - name: Extract crictl
   unarchive:
     src: /tmp/crictl.tar.gz
     dest: /usr/local/bin
     remote_src: yes
-  become: yes
 
-- name: Ensure crictl is executable
-  file:
-    path: /usr/local/bin/crictl
-    mode: '0755'
-  become: yes
 
-- name: Configure crictl to use containerd
+- name: Configure crictl
   copy:
     dest: /etc/crictl.yaml
     content: |
@@ -166,24 +191,40 @@
       image-endpoint: unix:///run/containerd/containerd.sock
       timeout: 2
       debug: false
-    mode: '0644'
 
-# ----------------------
-# 5. Initialize master
-# ----------------------
-- name: Initialize master node
+
+# =========================
+# 9. Wait for container runtime
+# =========================
+
+- name: Wait for containerd socket
+  wait_for:
+    path: /run/containerd/containerd.sock
+    timeout: 60
+
+
+# =========================
+# 10. Initialize master
+# =========================
+
+- name: Initialize Kubernetes master
   command: >
     kubeadm init
     --pod-network-cidr={{ pod_network_cidr }}
-    --cri-socket unix:///run/containerd/containerd.sock
+    --apiserver-advertise-address={{ ansible_default_ipv4.address }}
   args:
     creates: /etc/kubernetes/admin.conf
-  when: inventory_hostname in groups['master']
   register: kubeadm_init
+  retries: 2
+  delay: 30
+  timeout: 900
+  when: inventory_hostname in groups['master']
 
-# ----------------------
-# 6. Setup kubeconfig
-# ----------------------
+
+# =========================
+# 11. Setup kubeconfig
+# =========================
+
 - name: Setup kubeconfig for master
   shell: |
     mkdir -p /home/ubuntu/.kube
@@ -191,36 +232,43 @@
     chown ubuntu:ubuntu /home/ubuntu/.kube/config
   when: inventory_hostname in groups['master']
 
-# ----------------------
-# 7. Generate join command for workers
-# ----------------------
+
+# =========================
+# 12. Generate join command
+# =========================
+
 - name: Generate kubeadm join command
   shell: kubeadm token create --print-join-command
   register: join_command
   when: inventory_hostname == groups['master'][0]
 
-- name: Save join command as fact
+
+- name: Save join command
   set_fact:
     kube_join_cmd: "{{ join_command.stdout }}"
   when: inventory_hostname == groups['master'][0]
 
-# ----------------------
-# 8. Join worker nodes
-# ----------------------
-- name: Join worker nodes to cluster
+
+- name: Show join command
+  debug:
+    msg: "{{ join_command.stdout }}"
+  when: inventory_hostname == groups['master'][0]
+
+
+# =========================
+# 13. Join worker nodes
+# =========================
+
+- name: Join worker nodes
   command: "{{ hostvars[groups['master'][0]].kube_join_cmd }}"
   when: inventory_hostname in groups['workers']
 
-# ----------------------
-# 9. Install Flannel network plugin
-# ----------------------
-- name: Install Flannel CNI network
-  command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
-  when: inventory_hostname == groups['master'][0]
 
-# ----------------------
-# 10. Install AWS EBS CSI driver
-# ----------------------
-- name: Install EBS CSI driver
-  command: kubectl apply -k github.com/kubernetes-sigs/aws-ebs-csi-driver/deploy/kubernetes/overlays/stable/
-  when: inventory_hostname in groups['master']
+# =========================
+# 14. Install CNI network
+# =========================
+- name: Install Flannel network plugin
+  command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  when: inventory_hostname == groups['master'][0]
