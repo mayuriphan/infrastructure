@@ -1,10 +1,7 @@
 ---
 
-# -------------------------
-# Wait for kube-system pods (after CNI)
-# -------------------------
-- name: Wait for kube-system pods to be ready
-  command: kubectl wait --for=condition=Ready pods --all -n kube-system --timeout=300s
+- name: Wait for Flannel
+  command: kubectl rollout status daemonset/kube-flannel-ds -n kube-flannel --timeout=300s
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
   when: inventory_hostname == groups['master'][0]
@@ -14,14 +11,10 @@
 # -------------------------
 - name: Add ingress repo
   command: helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx/ --force-update
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
   become_user: ubuntu
 
 - name: Update helm repos
   command: helm repo update
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
   become_user: ubuntu
 
 - name: Install ingress controller
@@ -32,11 +25,7 @@
     --create-namespace
     --version {{ ingress_chart_version }}
     --set controller.service.type=NodePort
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
   become_user: ubuntu
-  args:
-    creates: /etc/kubernetes/ingress-installed
 
 # -------------------------
 # External DNS
@@ -44,8 +33,6 @@
 - name: Add external-dns repo
   command: helm repo add external-dns https://kubernetes-sigs.github.io/external-dns/
   become_user: ubuntu
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
 
 - name: Install external dns
   command: >
@@ -53,9 +40,6 @@
     external-dns/external-dns
     --namespace kube-system
   become_user: ubuntu
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-
 
 # -------------------------
 # AWS Load Balancer Controller
@@ -63,8 +47,6 @@
 - name: Add AWS EKS repo
   command: helm repo add eks https://aws.github.io/eks-charts
   become_user: ubuntu
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
 
 - name: Deploy AWS LB Controller
   command: >
@@ -75,9 +57,6 @@
     --set region={{ aws_region }}
     --set serviceAccount.create=true
   become_user: ubuntu
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-
 
 # -------------------------
 # OAuth2 Proxy
@@ -85,8 +64,6 @@
 - name: Add oauth2-proxy repo
   command: helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests
   become_user: ubuntu
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
 
 - name: Deploy oauth2 proxy
   command: >
@@ -95,5 +72,3 @@
     --namespace oauth2-proxy
     --create-namespace
   become_user: ubuntu
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf

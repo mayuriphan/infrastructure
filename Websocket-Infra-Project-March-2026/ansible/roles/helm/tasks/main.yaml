@@ -15,4 +15,4 @@
     dest: /usr/local/bin/helm
     mode: '0755'
     remote_src: yes
-  become: yes- 
+  become: yes

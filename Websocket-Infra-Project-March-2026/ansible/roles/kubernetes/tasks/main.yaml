@@ -222,6 +222,17 @@
   run_once: true
   when: inventory_hostname in groups['master']
 
+- name: Wait for Kubernetes API
+  shell: |
+    kubectl get nodes
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: api_check
+  retries: 20
+  delay: 10
+  until: api_check.rc == 0
+  when: inventory_hostname == groups['master'][0]
+
 - name: Create .kube directory
   file:
     path: /home/ubuntu/.kube
@@ -240,17 +251,6 @@
     group: ubuntu
     mode: "0644"
   when: inventory_hostname == groups['master'][0]
-
-# =========================
-# 11. Setup kubeconfig
-# =========================
-
-- name: Setup kubeconfig for master
-  shell: |
-    mkdir -p /home/ubuntu/.kube
-    cp /etc/kubernetes/admin.conf /home/ubuntu/.kube/config
-    chown ubuntu:ubuntu /home/ubuntu/.kube/config
-  when: inventory_hostname in groups['master']
 
 
 # =========================
@@ -290,7 +290,7 @@
 # 14. Install CNI network
 # =========================
 - name: Install Flannel network plugin
-  command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+  command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/v0.25.4/Documentation/kube-flannel.yml
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
   when: inventory_hostname == groups['master'][0]
@@ -313,4 +313,10 @@
   until: flannel_ready.rc == 0
   changed_when: false
   failed_when: flannel_ready.rc != 0
+  when: inventory_hostname == groups['master'][0]
+
+- name: Wait for CoreDNS
+  command: kubectl wait --for=condition=Ready pod -l k8s-app=kube-dns -n kube-system --timeout=300s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
   when: inventory_hostname == groups['master'][0]
