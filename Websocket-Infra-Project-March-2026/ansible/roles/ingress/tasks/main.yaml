@@ -13,16 +13,16 @@
 # Ingress Controller
 # -------------------------
 - name: Add ingress repo
-  command: helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx/
+  command: helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx/ --force-update
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
-  args:
-    creates: /home/ubuntu/.helm-repo-added-ingress
+  become_user: ubuntu
 
 - name: Update helm repos
   command: helm repo update
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
+  become_user: ubuntu
 
 - name: Install ingress controller
   command: >
@@ -34,6 +34,7 @@
     --set controller.service.type=NodePort
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
+  become_user: ubuntu
   args:
     creates: /etc/kubernetes/ingress-installed
 
@@ -42,6 +43,7 @@
 # -------------------------
 - name: Add external-dns repo
   command: helm repo add external-dns https://kubernetes-sigs.github.io/external-dns/
+  become_user: ubuntu
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
 
@@ -50,14 +52,17 @@
     helm upgrade --install external-dns
     external-dns/external-dns
     --namespace kube-system
+  become_user: ubuntu
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
+
 
 # -------------------------
 # AWS Load Balancer Controller
 # -------------------------
 - name: Add AWS EKS repo
   command: helm repo add eks https://aws.github.io/eks-charts
+  become_user: ubuntu
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
 
@@ -66,14 +71,20 @@
     helm upgrade --install aws-load-balancer-controller
     eks/aws-load-balancer-controller
     --namespace kube-system
+    --set clusterName={{ cluster_name }}
+    --set region={{ aws_region }}
+    --set serviceAccount.create=true
+  become_user: ubuntu
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
+
 
 # -------------------------
 # OAuth2 Proxy
 # -------------------------
 - name: Add oauth2-proxy repo
   command: helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests
+  become_user: ubuntu
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
 
@@ -83,5 +94,6 @@
     oauth2-proxy/oauth2-proxy
     --namespace oauth2-proxy
     --create-namespace
+  become_user: ubuntu
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf

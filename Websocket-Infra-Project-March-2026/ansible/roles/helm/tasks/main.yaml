@@ -9,7 +9,10 @@
     dest: /tmp
     remote_src: yes
 
-- name: Move Helm binary
-  command: mv /tmp/linux-amd64/helm /usr/local/bin/helm
-  args:
-    creates: /usr/local/bin/helm
+- name: Install Helm binary
+  copy:
+    src: /tmp/linux-amd64/helm
+    dest: /usr/local/bin/helm
+    mode: '0755'
+    remote_src: yes
+  become: yes- 
