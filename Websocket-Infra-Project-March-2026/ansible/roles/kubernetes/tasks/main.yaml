@@ -208,6 +208,7 @@
 # =========================
 
 - name: Initialize Kubernetes master
+  become: yes
   command: >
     kubeadm init
     --pod-network-cidr={{ pod_network_cidr }}
@@ -218,8 +219,27 @@
   retries: 2
   delay: 30
   timeout: 900
+  run_once: true
   when: inventory_hostname in groups['master']
 
+- name: Create .kube directory
+  file:
+    path: /home/ubuntu/.kube
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: "0755"
+  when: inventory_hostname == groups['master'][0]
+
+- name: Copy kubeconfig
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /home/ubuntu/.kube/config
+    remote_src: yes
+    owner: ubuntu
+    group: ubuntu
+    mode: "0644"
+  when: inventory_hostname == groups['master'][0]
 
 # =========================
 # 11. Setup kubeconfig
@@ -261,6 +281,8 @@
 
 - name: Join worker nodes
   command: "{{ hostvars[groups['master'][0]].kube_join_cmd }}"
+  args:
+    creates: /etc/kubernetes/kubelet.conf
   when: inventory_hostname in groups['workers']
 
 
@@ -271,4 +293,24 @@
   command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
+  when: inventory_hostname == groups['master'][0]
+  register: flannel_apply
+  changed_when: "'configured' in flannel_apply.stdout or 'created' in flannel_apply.stdout"
+
+# -------------------------
+# Wait until all Flannel pods are Running
+# -------------------------
+- name: Wait for all Flannel pods to be ready
+  shell: |
+    not_ready=$(kubectl get pods -n kube-system -l app=flannel \
+      -o jsonpath='{.items[*].status.containerStatuses[*].ready}' | grep -c false)
+    if [ "$not_ready" -eq 0 ]; then exit 0; else exit 1; fi
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  retries: 30        # retry ~5 minutes (30*10s)
+  delay: 10
+  register: flannel_ready
+  until: flannel_ready.rc == 0
+  changed_when: false
+  failed_when: flannel_ready.rc != 0
   when: inventory_hostname == groups['master'][0]

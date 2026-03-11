@@ -1,10 +1,28 @@
 ---
 
 # -------------------------
+# Wait for kube-system pods (after CNI)
+# -------------------------
+- name: Wait for kube-system pods to be ready
+  command: kubectl wait --for=condition=Ready pods --all -n kube-system --timeout=300s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  when: inventory_hostname == groups['master'][0]
+
+# -------------------------
 # Ingress Controller
 # -------------------------
 - name: Add ingress repo
-  command: helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+  command: helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx/
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  args:
+    creates: /home/ubuntu/.helm-repo-added-ingress
+
+- name: Update helm repos
+  command: helm repo update
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
 
 - name: Install ingress controller
   command: >
@@ -12,39 +30,51 @@
     ingress-nginx/ingress-nginx
     --namespace ingress-nginx
     --create-namespace
-
+     --version {{ ingress_chart_version }}
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  args:
+    creates: /etc/kubernetes/ingress-installed
 
 # -------------------------
 # External DNS
 # -------------------------
 - name: Add external-dns repo
   command: helm repo add external-dns https://kubernetes-sigs.github.io/external-dns/
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
 
 - name: Install external dns
   command: >
     helm upgrade --install external-dns
     external-dns/external-dns
     --namespace kube-system
-
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
 
 # -------------------------
 # AWS Load Balancer Controller
 # -------------------------
 - name: Add AWS EKS repo
   command: helm repo add eks https://aws.github.io/eks-charts
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
 
 - name: Deploy AWS LB Controller
   command: >
     helm upgrade --install aws-load-balancer-controller
     eks/aws-load-balancer-controller
     --namespace kube-system
-
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
 
 # -------------------------
 # OAuth2 Proxy
 # -------------------------
 - name: Add oauth2-proxy repo
   command: helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
 
 - name: Deploy oauth2 proxy
   command: >
@@ -52,3 +82,5 @@
     oauth2-proxy/oauth2-proxy
     --namespace oauth2-proxy
     --create-namespace
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf

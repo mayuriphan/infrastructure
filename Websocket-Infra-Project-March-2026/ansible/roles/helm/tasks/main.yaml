@@ -1,6 +1,6 @@
 - name: Download Helm
   get_url:
-    url: https://get.helm.sh/helm-v3.13.4-linux-amd64.tar.gz
+    url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
     dest: /tmp/helm.tar.gz
 
 - name: Extract Helm
@@ -11,3 +11,5 @@
 
 - name: Move Helm binary
   command: mv /tmp/linux-amd64/helm /usr/local/bin/helm
+  args:
+    creates: /usr/local/bin/helm
