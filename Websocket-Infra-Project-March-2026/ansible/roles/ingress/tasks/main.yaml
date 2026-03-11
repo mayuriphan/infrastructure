@@ -30,7 +30,8 @@
     ingress-nginx/ingress-nginx
     --namespace ingress-nginx
     --create-namespace
-     --version {{ ingress_chart_version }}
+    --version {{ ingress_chart_version }}
+    --set controller.service.type=NodePort
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
   args:
