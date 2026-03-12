@@ -6,11 +6,11 @@
     - common
     - kubernetes
 
-- name: Install Kubernetes addons
-  hosts: master
-  become: yes
+# - name: Install Kubernetes addons
+#   hosts: master
+#   become: yes
 
-  roles:
-    - helm
-    - ingress
-    - gitops
+#   roles:
+#     - helm
+#     - ingress
+#     - gitops

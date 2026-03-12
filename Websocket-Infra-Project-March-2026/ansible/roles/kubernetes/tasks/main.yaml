@@ -289,34 +289,80 @@
 # =========================
 # 14. Install CNI network
 # =========================
+- name: Ensure CNI directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - /etc/cni/net.d
+    - /opt/cni/bin
+
+- name: Set node-specific PodCIDR mapping
+  set_fact:
+    node_pod_cidr_map:
+      ec2-master: "10.244.0.0/16"
+      ec2-worker1: "10.244.1.0/16"
+      ec2-worker2: "10.244.2.0/16"
+
+- name: Add CNI configuration to kubelet
+  blockinfile:
+    path: /var/lib/kubelet/config.yaml
+    block: |
+      cni:
+        binDir: /opt/cni/bin
+        confDir: /etc/cni/net.d
+      podCIDR: "{{ node_pod_cidr_map[inventory_hostname] }}"
+    marker: "# {mark} ANSIBLE CNI BLOCK"
+
+- name: Wait for kubelet to become ready
+  become: yes
+  command: kubectl get nodes {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+  register: kubelet_ready
+  until: kubelet_ready.stdout == "True"
+  retries: 20
+  delay: 10
+  environment:
+    KUBECONFIG: "{{ '/etc/kubernetes/admin.conf' if inventory_hostname in groups['master'] else '/etc/kubernetes/kubelet.conf' }}"
+
+- name: Restart kubelet to pick up new CNI config
+  systemd:
+    name: kubelet
+    state: restarted
+    daemon_reload: yes
+
 - name: Install Flannel network plugin
   command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/v0.25.4/Documentation/kube-flannel.yml
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
-  when: inventory_hostname == groups['master'][0]
+  run_once: true
   register: flannel_apply
   changed_when: "'configured' in flannel_apply.stdout or 'created' in flannel_apply.stdout"
 
 # -------------------------
-# Wait until all Flannel pods are Running
+# Wait until all Flannel pods are Running on all nodes
 # -------------------------
-- name: Wait for all Flannel pods to be ready
+- name: Wait for all Flannel pods
   shell: |
-    not_ready=$(kubectl get pods -n kube-system -l app=flannel \
+    not_ready=$(kubectl get pods -n kube-flannel -l app=flannel \
       -o jsonpath='{.items[*].status.containerStatuses[*].ready}' | grep -c false)
     if [ "$not_ready" -eq 0 ]; then exit 0; else exit 1; fi
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
-  retries: 30        # retry ~5 minutes (30*10s)
+  retries: 5
   delay: 10
   register: flannel_ready
   until: flannel_ready.rc == 0
   changed_when: false
   failed_when: flannel_ready.rc != 0
-  when: inventory_hostname == groups['master'][0]
 
-- name: Wait for CoreDNS
+# -------------------------
+# Wait for CoreDNS pods to be Ready
+# -------------------------
+- name: Wait for CoreDNS pods
   command: kubectl wait --for=condition=Ready pod -l k8s-app=kube-dns -n kube-system --timeout=300s
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
-  when: inventory_hostname == groups['master'][0]
+  run_once: true
