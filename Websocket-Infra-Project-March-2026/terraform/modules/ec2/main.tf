@@ -9,6 +9,8 @@ resource "aws_instance" "this" {
 
   associate_public_ip_address = true
 
+  source_dest_check = false
+
   tags = {
     Name = var.name
     Environment = var.env
