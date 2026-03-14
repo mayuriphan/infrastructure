@@ -2,12 +2,16 @@
   get_url:
     url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
     dest: /tmp/helm.tar.gz
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
 
 - name: Extract Helm
   unarchive:
     src: /tmp/helm.tar.gz
     dest: /tmp
     remote_src: yes
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
 
 - name: Install Helm binary
   copy:
@@ -15,4 +19,6 @@
     dest: /usr/local/bin/helm
     mode: '0755'
     remote_src: yes
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf  
   become: yes
