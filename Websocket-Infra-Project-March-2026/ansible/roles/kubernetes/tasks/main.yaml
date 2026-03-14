@@ -312,58 +312,78 @@
     state: restarted
     daemon_reload: yes
 
+# # -------------------------
+# # Install Flannel pods 
+# # -------------------------
+# - name: Install Flannel network plugin
+#   command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/v0.25.4/Documentation/kube-flannel.yml
+#   environment:
+#     KUBECONFIG: /etc/kubernetes/admin.conf
+#   run_once: true
+#   register: flannel_apply
+#   changed_when: "'configured' in flannel_apply.stdout or 'created' in flannel_apply.stdout"
+
+# # -------------------------
+# # Wait until all Flannel pods are Running on all nodes
+# # -------------------------
+# - name: Wait for all Flannel pods
+#   shell: |
+#     not_ready=$(kubectl get pods -n kube-flannel -l app=flannel \
+#       -o jsonpath='{.items[*].status.containerStatuses[*].ready}' | grep -c false)
+#     if [ "$not_ready" -eq 0 ]; then exit 0; else exit 1; fi
+#   environment:
+#     KUBECONFIG: /etc/kubernetes/admin.conf
+#   retries: 10
+#   delay: 15
+#   register: flannel_ready
+#   until: flannel_ready.rc == 0
+#   changed_when: false
+#   failed_when: flannel_ready.rc != 0
+#   run_once: true
+
+# - name: Remove loop plugin from CoreDNS configmap
+#   shell: |
+#     kubectl get configmap coredns -n kube-system -o yaml | \
+#       sed '/^        loop$/d' | \
+#       kubectl apply -f -
+#   environment:
+#     KUBECONFIG: /etc/kubernetes/admin.conf
+#   run_once: true
+
+# - name: Restart CoreDNS to apply config
+#   command: kubectl rollout restart deployment/coredns -n kube-system
+#   environment:
+#     KUBECONFIG: /etc/kubernetes/admin.conf
+#   run_once: true
+
 # -------------------------
-# Install Flannel pods 
+# Install Calico CNI
 # -------------------------
-- name: Install Flannel network plugin
-  command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/v0.25.4/Documentation/kube-flannel.yml
+- name: Install Calico network plugin
+  command: kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.3/manifests/calico.yaml
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
   run_once: true
-  register: flannel_apply
-  changed_when: "'configured' in flannel_apply.stdout or 'created' in flannel_apply.stdout"
+  register: calico_apply
+  changed_when: "'configured' in calico_apply.stdout or 'created' in calico_apply.stdout"
+
 
 # -------------------------
-# Wait until all Flannel pods are Running on all nodes
+# Wait for Calico pods
 # -------------------------
-- name: Wait for all Flannel pods
+- name: Wait for Calico pods to be ready
   shell: |
-    not_ready=$(kubectl get pods -n kube-flannel -l app=flannel \
-      -o jsonpath='{.items[*].status.containerStatuses[*].ready}' | grep -c false)
-    if [ "$not_ready" -eq 0 ]; then exit 0; else exit 1; fi
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-  retries: 10
-  delay: 15
-  register: flannel_ready
-  until: flannel_ready.rc == 0
-  changed_when: false
-  failed_when: flannel_ready.rc != 0
-  run_once: true
-
-- name: Remove loop plugin from CoreDNS configmap
-  shell: |
-    kubectl get configmap coredns -n kube-system -o yaml | \
-      sed '/^        loop$/d' | \
-      kubectl apply -f -
+    kubectl wait --for=condition=Ready pod \
+    -l k8s-app=calico-node \
+    -n kube-system \
+    --timeout=300s
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
   run_once: true
 
-- name: Restart CoreDNS to apply config
-  command: kubectl rollout restart deployment/coredns -n kube-system
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-  run_once: true
-
-- name: Wait for CoreDNS rollout
-  command: kubectl rollout status deployment/coredns -n kube-system --timeout=120s
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-  run_once: true
 
 # -------------------------
-# Wait for CoreDNS pods to be Ready
+# Wait for CoreDNS pods
 # -------------------------
 - name: Wait for CoreDNS pods
   command: kubectl wait --for=condition=Ready pod -l k8s-app=kube-dns -n kube-system --timeout=300s
