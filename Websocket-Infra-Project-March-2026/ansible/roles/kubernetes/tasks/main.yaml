@@ -218,7 +218,8 @@
   register: kubeadm_init
   retries: 2
   delay: 30
-  timeout: 900
+  async: 900
+  poll: 15
   run_once: true
   when: inventory_hostname in groups['master']
 
@@ -231,34 +232,8 @@
   retries: 20
   delay: 10
   until: api_check.rc == 0
+  run_once: true
   when: inventory_hostname == groups['master'][0]
-
-#- name: Fix kubelet.conf client-key
-  #become: yes
-  #block:
-    #- name: Correct client-key in kubelet.conf
-      #replace:
-        #path: "{{ kubelet_conf_path }}"
-        #regexp: 'client-key:.*'
-        #replace: 'client-key: /var/lib/kubelet/pki/kubelet.key'
-  #vars:
-    #kubelet_conf_path: >-
-      #{{ '/etc/kubernetes/kubelet.conf' if inventory_hostname in groups['master'] else '/etc/kubernetes/kubelet.conf' }}
-  #notify:
-    #- Restart kubelet after kubeconfig update
-
-# Ensure kubelet config exists on workers
-#- name: Copy kubelet.conf from master to workers
-  #copy:
-    #src: /etc/kubernetes/kubelet.conf
-    #dest: /etc/kubernetes/kubelet.conf
-    #owner: root
-    #group: root
-    #mode: '0644'
-    #remote_src: yes
-  #delegate_to: "{{ groups['master'][0] }}"
-  #run_once: true
-  #when: inventory_hostname in groups['workers']
 
 - name: Create .kube directory
   file:
@@ -316,6 +291,7 @@
 # =========================
 # 14. Install CNI network
 # =========================
+
 - name: Ensure CNI directories exist
   file:
     path: "{{ item }}"
@@ -327,38 +303,6 @@
     - /etc/cni/net.d
     - /opt/cni/bin
 
-- name: Set node-specific PodCIDR mapping
-  set_fact:
-    node_pod_cidr_map:
-      ec2-master: "10.244.0.0/16"
-      ec2-worker1: "10.244.1.0/16"
-      ec2-worker2: "10.244.2.0/16"
-
-- name: Add CNI configuration to kubelet
-  blockinfile:
-    path: /var/lib/kubelet/config.yaml
-    block: |
-      cni:
-        binDir: /opt/cni/bin
-        confDir: /etc/cni/net.d
-      podCIDR: "{{ node_pod_cidr_map[inventory_hostname] }}"
-    marker: "# {mark} ANSIBLE CNI BLOCK"
-
-# -------------------------
-#  Copy kubelet.conf to workers
-# -------------------------
-- name: Copy kubelet.conf from master to workers
-  copy:
-    src: /etc/kubernetes/kubelet.conf
-    dest: /etc/kubernetes/kubelet.conf
-    owner: root
-    group: root
-    mode: '0644'
-    remote_src: yes
-  delegate_to: "{{ groups['master'][0] }}"
-  run_once: true
-  when: inventory_hostname in groups['workers']
-
 # -------------------------
 #  Restart kubelet on all nodes
 # -------------------------
@@ -369,19 +313,8 @@
     daemon_reload: yes
 
 # -------------------------
-#  Wait for kubelet to become Ready on all nodes
+# Install Flannel pods 
 # -------------------------
-- name: Wait for kubelet Ready
-  shell: |
-    kubectl get nodes {{ inventory_hostname }} \
-      -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
-  register: kubelet_ready
-  retries: 20
-  delay: 15
-  until: kubelet_ready.stdout == "True"
-  environment:
-    KUBECONFIG: "{{ '/etc/kubernetes/admin.conf' if inventory_hostname in groups['master'] else '/etc/kubernetes/kubelet.conf' }}"
-
 - name: Install Flannel network plugin
   command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/v0.25.4/Documentation/kube-flannel.yml
   environment:
@@ -406,36 +339,28 @@
   until: flannel_ready.rc == 0
   changed_when: false
   failed_when: flannel_ready.rc != 0
+  run_once: true
 
-#- name: Restart kubelet to pick up new config
-  #systemd:
-    #name: kubelet
-    #state: restarted
-    #daemon_reload: yes
+- name: Remove loop plugin from CoreDNS configmap
+  shell: |
+    kubectl get configmap coredns -n kube-system -o yaml | \
+      sed '/^        loop$/d' | \
+      kubectl apply -f -
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  run_once: true
 
-# -------------------------
-# Wait for Kubelet to be Ready
-# -------------------------
-#- name: Wait for all nodes to become Ready
-  #shell: |
-    #kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}:{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}'
-  #environment:
-    #KUBECONFIG: /etc/kubernetes/admin.conf
-  #retries: 30
-  #delay: 10
-  #register: node_status
-  #until: "'False' not in node_status.stdout"
-  #run_once: true
+- name: Restart CoreDNS to apply config
+  command: kubectl rollout restart deployment/coredns -n kube-system
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  run_once: true
 
-# Now wait for kubelet Ready
-#- name: Wait for kubelet to become ready
-  #command: kubectl get nodes {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
-  #register: kubelet_ready
-  #retries: 30
-  #delay: 10
-  #until: kubelet_ready.stdout == "True"
-  #environment:
-    #KUBECONFIG: "{{ '/etc/kubernetes/admin.conf' if inventory_hostname in groups['master'] else '/etc/kubernetes/kubelet.conf' }}"
+- name: Wait for CoreDNS rollout
+  command: kubectl rollout status deployment/coredns -n kube-system --timeout=120s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  run_once: true
 
 # -------------------------
 # Wait for CoreDNS pods to be Ready
