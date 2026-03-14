@@ -1,74 +1,94 @@
----
-
-- name: Wait for Flannel
-  command: kubectl rollout status daemonset/kube-flannel-ds -n kube-flannel --timeout=300s
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-  when: inventory_hostname == groups['master'][0]
-
 # -------------------------
 # Ingress Controller
 # -------------------------
 - name: Add ingress repo
   command: helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx/ --force-update
-  become_user: ubuntu
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  run_once: true
 
 - name: Update helm repos
   command: helm repo update
-  become_user: ubuntu
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  run_once: true
 
 - name: Install ingress controller
   command: >
-    helm upgrade --install ingress-nginx
-    ingress-nginx/ingress-nginx
+    helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx
     --namespace ingress-nginx
     --create-namespace
     --version {{ ingress_chart_version }}
     --set controller.service.type=NodePort
-  become_user: ubuntu
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  run_once: true
+
+- name: Wait for ingress-nginx pods to be ready
+  shell: |
+    not_ready=$(kubectl get pods -n ingress-nginx -l app.kubernetes.io/name=ingress-nginx \
+      -o jsonpath='{.items[*].status.containerStatuses[*].ready}' | grep -c false)
+    if [ "$not_ready" -eq 0 ]; then exit 0; else exit 1; fi
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  retries: 20
+  delay: 15
+  register: ingress_ready
+  until: ingress_ready.rc == 0
+  changed_when: false
+  failed_when: ingress_ready.rc != 0
 
 # -------------------------
 # External DNS
 # -------------------------
 - name: Add external-dns repo
   command: helm repo add external-dns https://kubernetes-sigs.github.io/external-dns/
-  become_user: ubuntu
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  run_once: true
 
 - name: Install external dns
   command: >
-    helm upgrade --install external-dns
-    external-dns/external-dns
+    helm upgrade --install external-dns external-dns/external-dns
     --namespace kube-system
-  become_user: ubuntu
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  run_once: true
 
 # -------------------------
 # AWS Load Balancer Controller
 # -------------------------
 - name: Add AWS EKS repo
   command: helm repo add eks https://aws.github.io/eks-charts
-  become_user: ubuntu
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  run_once: true
 
 - name: Deploy AWS LB Controller
   command: >
-    helm upgrade --install aws-load-balancer-controller
-    eks/aws-load-balancer-controller
+    helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller
     --namespace kube-system
     --set clusterName={{ cluster_name }}
     --set region={{ aws_region }}
     --set serviceAccount.create=true
-  become_user: ubuntu
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  run_once: true
 
 # -------------------------
 # OAuth2 Proxy
 # -------------------------
 - name: Add oauth2-proxy repo
   command: helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests
-  become_user: ubuntu
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  run_once: true
 
 - name: Deploy oauth2 proxy
   command: >
-    helm upgrade --install oauth2-proxy
-    oauth2-proxy/oauth2-proxy
+    helm upgrade --install oauth2-proxy oauth2-proxy/oauth2-proxy
     --namespace oauth2-proxy
     --create-namespace
-  become_user: ubuntu
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  run_once: true
