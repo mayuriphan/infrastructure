@@ -1,22 +1,78 @@
 ---
 # dev version
+---
+
+# -------------------------
+# ArgoCD (LIGHTWEIGHT)
+# -------------------------
+
 - name: Create ArgoCD namespace
   command: kubectl create namespace argocd
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
   ignore_errors: yes
 
-- name: Deploy ArgoCD
-  command: kubectl apply --server-side-n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+- name: Deploy ArgoCD (standard install)
+  command: >
+    kubectl apply -n argocd -f
+    https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+# Wait for ArgoCD pods to come up
+- name: Wait for ArgoCD pods
+  shell: kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+# 
+- name: Scale ArgoCD components to 1 replica
+  shell: |
+    kubectl scale deployment argocd-server -n argocd --replicas=1
+    kubectl scale deployment argocd-repo-server -n argocd --replicas=1
+    kubectl scale deployment argocd-application-controller -n argocd --replicas=1
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+# Remove Dex
+- name: Remove ArgoCD Dex (SSO)
+  command: kubectl delete deployment argocd-dex-server -n argocd
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  ignore_errors: yes
+
+# Limit resources
+- name: Limit ArgoCD repo-server resources
+  command: >
+    kubectl set resources deployment argocd-repo-server -n argocd
+    --limits=cpu=200m,memory=256Mi
+    --requests=cpu=100m,memory=128Mi
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Limit ArgoCD server resources
+  command: >
+    kubectl set resources deployment argocd-server -n argocd
+    --limits=cpu=200m,memory=256Mi
+    --requests=cpu=100m,memory=128Mi
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+# Force ArgoCD to control-plane node
+- name: Pin ArgoCD to control-plane
+  command: >
+    kubectl patch deployment argocd-repo-server -n argocd
+    -p '{"spec":{"template":{"spec":{"nodeSelector":{"node-role.kubernetes.io/control-plane":""}}}}}'
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
 
 
 # -------------------------
-# Vault
+# External Secrets
 # -------------------------
-- name: Add Vault Helm repo
-  command: helm repo add hashicorp https://helm.releases.hashicorp.com
+
+- name: Add External Secrets repo
+  command: helm repo add external-secrets https://charts.external-secrets.io
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
 
@@ -25,32 +81,15 @@
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
 
-- name: Deploy Vault
-  command: >
-    helm upgrade --install vault
-    hashicorp/vault
-    --namespace vault
-    --create-namespace
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-
-# -------------------------
-# External Secrets
-# -------------------------
-- name: Add External Secrets repo
-  command: helm repo add external-secrets https://charts.external-secrets.io
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-
-- name: Deploy External Secrets
+- name: Deploy External Secrets (single replica)
   command: >
     helm upgrade --install external-secrets
     external-secrets/external-secrets
     --namespace external-secrets
     --create-namespace
+    --set replicaCount=1
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
-
 
 
 
