@@ -8,7 +8,7 @@ variable "key_name" {
 
 variable "instance_type" {
   type    = string
-  default = "t3.micro"  # free-tier instance
+  default = "t3.medium"  # free-tier instance
 }
 
 variable "sg_id" {

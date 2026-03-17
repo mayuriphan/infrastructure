@@ -55,40 +55,40 @@
     KUBECONFIG: /etc/kubernetes/admin.conf
   run_once: true
 
-# -------------------------
-# AWS Load Balancer Controller
-# -------------------------
-- name: Add AWS EKS repo
-  command: helm repo add eks https://aws.github.io/eks-charts
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-  run_once: true
+# # -------------------------
+# # AWS Load Balancer Controller
+# # -------------------------
+# - name: Add AWS EKS repo
+#   command: helm repo add eks https://aws.github.io/eks-charts
+#   environment:
+#     KUBECONFIG: /etc/kubernetes/admin.conf
+#   run_once: true
 
-- name: Deploy AWS LB Controller
-  command: >
-    helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller
-    --namespace kube-system
-    --set clusterName={{ cluster_name }}
-    --set region={{ aws_region }}
-    --set serviceAccount.create=true
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-  run_once: true
+# - name: Deploy AWS LB Controller
+#   command: >
+#     helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller
+#     --namespace kube-system
+#     --set clusterName={{ cluster_name }}
+#     --set region={{ aws_region }}
+#     --set serviceAccount.create=true
+#   environment:
+#     KUBECONFIG: /etc/kubernetes/admin.conf
+#   run_once: true
 
 # -------------------------
-# OAuth2 Proxy
-# -------------------------
-- name: Add oauth2-proxy repo
-  command: helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-  run_once: true
+# # OAuth2 Proxy
+# # -------------------------
+# - name: Add oauth2-proxy repo
+#   command: helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests
+#   environment:
+#     KUBECONFIG: /etc/kubernetes/admin.conf
+#   run_once: true
 
-- name: Deploy oauth2 proxy
-  command: >
-    helm upgrade --install oauth2-proxy oauth2-proxy/oauth2-proxy
-    --namespace oauth2-proxy
-    --create-namespace
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-  run_once: true
+# - name: Deploy oauth2 proxy
+#   command: >
+#     helm upgrade --install oauth2-proxy oauth2-proxy/oauth2-proxy
+#     --namespace oauth2-proxy
+#     --create-namespace
+#   environment:
+#     KUBECONFIG: /etc/kubernetes/admin.conf
+#   run_once: true

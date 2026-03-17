@@ -7,7 +7,7 @@
   ignore_errors: yes
 
 - name: Deploy ArgoCD
-  command: kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+  command: kubectl apply --server-side-n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
 

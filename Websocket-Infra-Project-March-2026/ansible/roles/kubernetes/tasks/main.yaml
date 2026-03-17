@@ -254,6 +254,45 @@
     mode: "0644"
   when: inventory_hostname == groups['master'][0]
 
+# -------------------------
+# Install Calico CNI
+# -------------------------
+- name: Install Calico network plugin
+  command: kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.3/manifests/calico.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  run_once: true
+  register: calico_apply
+  changed_when: "'configured' in calico_apply.stdout or 'created' in calico_apply.stdout"
+
+- name: Patch Calico ConfigMap to set serviceCIDR
+  command: >
+    kubectl patch cm calico-config -n kube-system
+    --type merge
+    -p '{"data":{"serviceCIDR":"10.96.0.0/12"}}'
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  run_once: true
+
+- name: Restart Calico pods
+  command: kubectl delete pod -n kube-system -l k8s-app=calico-node
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  run_once: true
+
+# -------------------------
+# Wait for Calico pods
+# -------------------------
+- name: Wait for Calico pods to be ready
+  shell: |
+    kubectl wait --for=condition=Ready pod \
+    -l k8s-app=calico-node \
+    -n kube-system \
+    --timeout=300s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  run_once: true
+
 
 # =========================
 # 12. Generate join command
@@ -288,55 +327,14 @@
   when: inventory_hostname in groups['workers']
 
 
-# =========================
-# 14. Install CNI network
-# =========================
-
-- name: Ensure CNI directories exist
-  file:
-    path: "{{ item }}"
-    state: directory
-    owner: root
-    group: root
-    mode: '0755'
-  loop:
-    - /etc/cni/net.d
-    - /opt/cni/bin
-
-# -------------------------
-#  Restart kubelet on all nodes
-# -------------------------
-- name: Restart kubelet
-  systemd:
-    name: kubelet
-    state: restarted
-    daemon_reload: yes
-
-# -------------------------
-# Install Calico CNI
-# -------------------------
-- name: Install Calico network plugin
-  command: kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.3/manifests/calico.yaml
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-  run_once: true
-  register: calico_apply
-  changed_when: "'configured' in calico_apply.stdout or 'created' in calico_apply.stdout"
-
-
-# -------------------------
-# Wait for Calico pods
-# -------------------------
-- name: Wait for Calico pods to be ready
-  shell: |
-    kubectl wait --for=condition=Ready pod \
-    -l k8s-app=calico-node \
-    -n kube-system \
-    --timeout=300s
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-  run_once: true
-
+# # -------------------------
+# #  Restart kubelet on all nodes
+# # -------------------------
+# - name: Restart kubelet
+#   systemd:
+#     name: kubelet
+#     state: restarted
+#     daemon_reload: yes
 
 # -------------------------
 # Wait for CoreDNS pods
