@@ -1,5 +1,5 @@
 ---
-
+# dev version
 - name: Create ArgoCD namespace
   command: kubectl create namespace argocd
   environment:
@@ -50,3 +50,70 @@
     --create-namespace
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#===========
+
+# - name: Create ArgoCD namespace
+#   command: kubectl create namespace argocd
+#   environment:
+#     KUBECONFIG: /etc/kubernetes/admin.conf
+#   ignore_errors: yes
+
+# - name: Deploy ArgoCD
+#   command: kubectl apply --server-side-n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+#   environment:
+#     KUBECONFIG: /etc/kubernetes/admin.conf
+
+
+# # -------------------------
+# # Vault
+# # -------------------------
+# - name: Add Vault Helm repo
+#   command: helm repo add hashicorp https://helm.releases.hashicorp.com
+#   environment:
+#     KUBECONFIG: /etc/kubernetes/admin.conf
+
+# - name: Update helm repos
+#   command: helm repo update
+#   environment:
+#     KUBECONFIG: /etc/kubernetes/admin.conf
+
+# - name: Deploy Vault
+#   command: >
+#     helm upgrade --install vault
+#     hashicorp/vault
+#     --namespace vault
+#     --create-namespace
+#   environment:
+#     KUBECONFIG: /etc/kubernetes/admin.conf
+
+# # -------------------------
+# # External Secrets
+# # -------------------------
+# - name: Add External Secrets repo
+#   command: helm repo add external-secrets https://charts.external-secrets.io
+#   environment:
+#     KUBECONFIG: /etc/kubernetes/admin.conf
+
+# - name: Deploy External Secrets
+#   command: >
+#     helm upgrade --install external-secrets
+#     external-secrets/external-secrets
+#     --namespace external-secrets
+#     --create-namespace
+#   environment:
+#     KUBECONFIG: /etc/kubernetes/admin.conf

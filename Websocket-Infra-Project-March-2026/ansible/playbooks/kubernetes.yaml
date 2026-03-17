@@ -13,4 +13,4 @@
   roles:
     - helm
     - ingress
-#     - gitops
+    - gitops
