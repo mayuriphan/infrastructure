@@ -11,6 +11,11 @@ resource "aws_instance" "this" {
 
   source_dest_check = false
 
+  root_block_device {
+    volume_size = var.root_volume_size
+    volume_type = var.root_volume_type
+  }
+
   tags = {
     Name = var.name
     Environment = var.env

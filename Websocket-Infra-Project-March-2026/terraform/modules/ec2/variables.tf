@@ -31,3 +31,13 @@ variable "role" {
 variable "subnet_id" {}
 
 variable "name" {}
+
+variable "root_volume_size" {
+  type    = number
+  default = 8
+}
+
+variable "root_volume_type" {
+  type    = string
+  default = "gp3"
+}

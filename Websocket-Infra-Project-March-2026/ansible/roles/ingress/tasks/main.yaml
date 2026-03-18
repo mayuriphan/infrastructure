@@ -1,6 +1,16 @@
 # -------------------------
 # Ingress Controller
 # -------------------------
+- name: Ensure ingress namespace exists
+  command: kubectl create ns ingress-nginx
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  ignore_errors: true
+  run_once: true
+
+# -------------------------
+# Ingress Controller
+# -------------------------
 - name: Add ingress repo
   command: helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx/ --force-update
   environment:

@@ -1,6 +1,9 @@
 ---
-# dev version
----
+
+- name: Cleanup failed ArgoCD install
+  command: kubectl delete namespace argocd --ignore-not-found
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
 
 # -------------------------
 # ArgoCD (LIGHTWEIGHT)
@@ -15,7 +18,7 @@
 - name: Deploy ArgoCD (standard install)
   command: >
     kubectl apply -n argocd -f
-    https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    https://raw.githubusercontent.com/argoproj/argo-cd/v2.8.4/manifests/install.yaml
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
 
