@@ -9,3 +9,7 @@ variable "my_ip" {
 variable "env" {
   type = string
 }
+
+variable "private_subnet_cidrs" {
+  type = list(string)
+}

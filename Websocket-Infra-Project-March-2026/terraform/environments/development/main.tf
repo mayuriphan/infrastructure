@@ -1,12 +1,15 @@
 module "vpc" {
   source               = "../../modules/vpc"
   cidr                 = var.vpc_cidr
-  public_subnet_cidr   = var.public_subnet_cidr
+  public_subnet_cidrs  = var.public_subnet_cidrs
+  private_subnet_cidrs = var.private_subnet_cidrs
+  availability_zones   = var.availability_zones
   env                  = var.env
 }
 
 module "sg" {
   source   = "../../modules/security-group"
+  private_subnet_cidrs = var.private_subnet_cidrs
   vpc_id   = module.vpc.vpc_id
   my_ip    = var.my_ip
   env      = var.env
@@ -22,37 +25,36 @@ module "ecr" {
   env    = var.env
 }
 
-module "ec2_bastion" {
-  source           = "../../modules/ec2"
-  ami              = var.ami
-  key_name         = var.key_name
-  sg_id            = module.sg.sg_id
-  subnet_id        = module.vpc.public_subnet_id
-  instance_profile = module.iam.instance_profile
-  env              = var.env
-  name             = "${var.env}-bastion-instance"
-  role             = "bastion"
-}
+# module "eks" {
+#   source = "../../modules/eks"
 
-module "ec2_k8" {
-  source           = "../../modules/ec2"
-  ami              = var.ami
-  key_name         = var.key_name
-  instance_type    = "t3.small" # k8 master needs more resources than free-tier
-  sg_id            = module.sg.sg_id
-  subnet_id        = module.vpc.public_subnet_id
-  instance_profile = module.iam.instance_profile
-  env              = var.env
-  name             = "${var.env}-k8-instance"
-  role             = "k8"
-}
+#   cluster_name    = "${var.env}-eks-cluster"
+#   cluster_version = var.cluster_version
+
+#   vpc_id     = module.vpc.vpc_id
+#   subnet_ids = module.vpc.private_subnet_ids
+
+#   sg_id    = module.sg.sg_id
+#   key_name = var.key_name
+
+#   eks_managed_node_groups = {
+#     dev_nodes = {
+#       desired_size   = 2
+#       min_size       = 1
+#       max_size       = 3
+#       instance_types = ["t3.small"]
+#     }
+#   }
+
+#   env = var.env
+# }
 
 module "ec2_monitoring" {
   source           = "../../modules/ec2"
   ami              = var.ami
   key_name         = var.key_name
   sg_id            = module.sg.sg_id
-  subnet_id        = module.vpc.public_subnet_id
+  subnet_id        = module.vpc.public_subnet_ids[0]
   instance_profile = module.iam.instance_profile
   env              = var.env
   name             = "${var.env}-monitoring-instance"
@@ -64,35 +66,11 @@ module "ec2_db" {
   ami              = var.ami
   key_name         = var.key_name
   sg_id            = module.sg.sg_id
-  subnet_id        = module.vpc.public_subnet_id
+  subnet_id        = module.vpc.public_subnet_ids[0]
   instance_profile = module.iam.instance_profile
   env              = var.env
   name             = "${var.env}-postgres-instance"
   role           = "db"
-}
-
-module "ec2_worker1" {
-  source           = "../../modules/ec2"
-  ami              = var.ami
-  key_name         = var.key_name
-  sg_id            = module.sg.sg_id
-  subnet_id        = module.vpc.public_subnet_id
-  instance_profile = module.iam.instance_profile
-  env              = var.env
-  name             = "${var.env}-k8-worker1-instance"
-  role           = "worker"
-}
-
-module "ec2_worker2" {
-  source           = "../../modules/ec2"
-  ami              = var.ami
-  key_name         = var.key_name
-  sg_id            = module.sg.sg_id
-  subnet_id        = module.vpc.public_subnet_id
-  instance_profile = module.iam.instance_profile
-  env              = var.env
-  name             = "${var.env}-k8-worker2-instance"
-  role           = "worker"
 }
 
 module "ec2_rabbit" {
@@ -100,12 +78,62 @@ module "ec2_rabbit" {
   ami              = var.ami
   key_name         = var.key_name
   sg_id            = module.sg.sg_id
-  subnet_id        = module.vpc.public_subnet_id
+  subnet_id        = module.vpc.public_subnet_ids[0]
   instance_profile = module.iam.instance_profile
   env              = var.env
   name             = "${var.env}-rabbit-instance"
   role           = "rabbit"
 }
+
+# module "ec2_bastion" {
+#   source           = "../../modules/ec2"
+#   ami              = var.ami
+#   key_name         = var.key_name
+#   sg_id            = module.sg.sg_id
+#   subnet_id        = module.vpc.public_subnet_id
+#   instance_profile = module.iam.instance_profile
+#   env              = var.env
+#   name             = "${var.env}-bastion-instance"
+#   role             = "bastion"
+# }
+
+# module "ec2_k8" {
+#   source           = "../../modules/ec2"
+#   ami              = var.ami
+#   key_name         = var.key_name
+#   instance_type    = "t3.small" # k8 master needs more resources than free-tier
+#   sg_id            = module.sg.sg_id
+#   subnet_id        = module.vpc.public_subnet_id
+#   instance_profile = module.iam.instance_profile
+#   env              = var.env
+#   name             = "${var.env}-k8-instance"
+#   role             = "k8"
+# }
+
+# module "ec2_worker1" {
+#   source           = "../../modules/ec2"
+#   ami              = var.ami
+#   key_name         = var.key_name
+#   sg_id            = module.sg.sg_id
+#   subnet_id        = module.vpc.public_subnet_id
+#   instance_profile = module.iam.instance_profile
+#   env              = var.env
+#   name             = "${var.env}-k8-worker1-instance"
+#   role           = "worker"
+# }
+
+# module "ec2_worker2" {
+#   source           = "../../modules/ec2"
+#   ami              = var.ami
+#   key_name         = var.key_name
+#   sg_id            = module.sg.sg_id
+#   subnet_id        = module.vpc.public_subnet_id
+#   instance_profile = module.iam.instance_profile
+#   env              = var.env
+#   name             = "${var.env}-k8-worker2-instance"
+#   role           = "worker"
+# }
+
 
 # module "autoscaling" {
 #   source             = "../../modules/autoscaling"
