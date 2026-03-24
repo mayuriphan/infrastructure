@@ -1,0 +1,82 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: ap-south-1
+
+  # ECR
+  ECR_REPOSITORY: wss-app
+  IMAGE_TAG: ${{ github.sha }}
+
+  # GitOps
+  GITOPS_REPO: ${{ env.GITOPS_REPO }}
+  GITOPS_TOKEN: ${{ env.GITOPS_TOKEN }}
+  GITOPS_BRANCH: main
+  DEPLOYMENT_FILE_PATH: apps/wss-app/deployment.yaml
+
+
+  AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout app repo
+      - name: Checkout App repo
+        uses: actions/checkout@v3
+
+      # Configure AWS
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Login to ECR
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      # Set registry dynamically
+      - name: Set ECR registry
+        run: echo "ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}" >> $GITHUB_ENV
+
+      # Build image
+      - name: Build Docker image
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+
+      # Push image
+      - name: Push Docker image
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+      #  Checkout GitOps repo
+      - name: Checkout GitOps repo
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ env.GITOPS_REPO }}
+          token: ${{ env.GITOPS_TOKEN }}
+          path: gitops
+
+      # Update deployment.yaml
+      - name: Update Deployment YAML
+        run: |
+          sed -i "s|image: .*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG|g" gitops/$DEPLOYMENT_FILE_PATH
+
+      # Commit & push
+      - name: Commit and Push changes
+        run: |
+          cd gitops
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add $DEPLOYMENT_FILE_PATH
+          git commit -m "Update image to $IMAGE_TAG" || echo "No changes to commit"
+          git push origin $GITOPS_BRANCH
